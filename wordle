@@ -94,7 +94,7 @@ def parse_misplaced_letter(misplaced_letter):
 def extract_letters(string):
 	return list(filter(lambda c: 'a' <= c <= 'z', string))
 
-def has_required_letters(word, required_letter):
+def has_required_letters(word, required_letters):
 	for required_letter in required_letters:
 		if required_letter not in word:
 			return False
