@@ -77,11 +77,22 @@ def parse_misplaced_letter(misplaced_letter):
 			if 'a' < char < 'z':
 				yield dotted_pattern(position, char)
 
+def extract_letters(string):
+	return list(filter(lambda c: 'a' <= c <= 'z', string))
+
 def has_required_letters(word, required_letter):
 	for required_letter in required_letters:
 		if required_letter not in word:
 			return False
 	return True
+
+def analyse_letter_frequency(words):
+	results = {'data': {}, 'top': []}
+	for word in words:
+		for char in word:
+			results['data'][char] = results['data'].setdefault(char, 0) + 1
+	results['top'] = sorted(results['data'], key=lambda x: results['data'][x], reverse=True)
+	return results
 
 # Real work starts here:
 if '-h' in sys.argv or '--help' in sys.argv:
@@ -117,6 +128,7 @@ Usage:
 	print(help)
 	sys.exit(0)
 wrong_letters_re = correct_letters_re = all_misplaced_letters_re = required_letters = None
+all_required_letters = []
 
 if len(sys.argv) >= 2:
 	wrong_letters = sys.argv[1].lower()
@@ -128,6 +140,8 @@ if len(sys.argv) >= 3:
 	else:
 		correct_letters = sys.argv[2].lower()
 	correct_letters_re = f'{correct_letters}'
+	# Assume all letters in the pattern are required, i.e. assume there are no negative character classes:
+	all_required_letters = extract_letters(correct_letters)
 
 if len(sys.argv) >= 4:
 	all_misplaced_letters_re = []
@@ -135,7 +149,8 @@ if len(sys.argv) >= 4:
 		all_misplaced_letters_re.extend(list(parse_misplaced_letter(misplaced_letter_arg)))
 	all_misplaced_letters_re = '|'.join(all_misplaced_letters_re)
 	all_misplaced_letters_re = f'^(?:{all_misplaced_letters_re})$'
-	required_letters = list(filter(lambda c: 'a' <= c <= 'z', all_misplaced_letters_re))
+	required_letters = extract_letters(all_misplaced_letters_re)
+	all_required_letters.extend(required_letters)
 
 retained_words_set = set()
 with open_cached_dictionary() as words_filedesc:
@@ -176,6 +191,15 @@ retained_words = list(retained_words_set)
 retained_words.sort()
 for word in retained_words:
 	print(word)
-print(f'({len(retained_words)})')
+
+# Provide some hints:
+if len(retained_words) > 1:
+	analysis = analyse_letter_frequency(retained_words)
+	all_required_letters = list(set(all_required_letters))
+	print(f'({len(retained_words)}) Top letters: %s' % ' '.join(analysis['top']))
+	if all_required_letters:
+		top_new_letters = list(filter(lambda c: c not in all_required_letters, analysis['top']))
+		if top_new_letters:
+			print('Top new letters:', ' '.join(top_new_letters))
 
 sys.exit(0)
