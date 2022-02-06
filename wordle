@@ -55,6 +55,19 @@ def dictionary():
 			word = word.lower()
 			yield word
 
+def words_with_all_letters(required_letters):
+	for word in dictionary():
+		if has_required_letters(word, required_letters):
+			yield word
+
+def words_with_most_letters(letters):
+	if not letters:
+		return []
+	for i in range(WORD_LENGTH, 1, -1):
+		candidates = list(words_with_all_letters(letters[:i]))
+		if candidates:
+			return candidates
+
 def set_string_char(string, index, char):
 	char_array = list(string)
 	char_array[index] = char
@@ -204,5 +217,8 @@ if len(retained_words) > 1:
 		top_new_letters = list(filter(lambda c: c not in all_required_letters, analysis['top']))
 		if top_new_letters:
 			print('Top new letters:', ' '.join(top_new_letters))
+			if len(retained_words) > 2:
+				discriminants = words_with_most_letters(top_new_letters)
+				print('Suggested discriminants:', ' '.join(discriminants[:50]))
 
 sys.exit(0)
