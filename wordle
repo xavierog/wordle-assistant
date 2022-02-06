@@ -41,6 +41,20 @@ def open_cached_dictionary():
 		store_dictionary(download_dictionary())
 	return open(cache_dictionary_path())
 
+def dictionary():
+	with open_cached_dictionary() as words_filedesc:
+		word_count = 0
+		for word in words_filedesc.readlines():
+			word = word.rstrip()
+			# Focus on candidate words:
+			if len(word) != WORD_LENGTH:
+				continue
+			# Ignore words with non alphabetic characters:
+			if not re.match(r'^[a-zA-Z]+$', word):
+				continue
+			word = word.lower()
+			yield word
+
 def set_string_char(string, index, char):
 	char_array = list(string)
 	char_array[index] = char
@@ -153,38 +167,27 @@ if len(sys.argv) >= 4:
 	all_required_letters.extend(required_letters)
 
 retained_words_set = set()
-with open_cached_dictionary() as words_filedesc:
-	word_count = 0
-	for word in words_filedesc.readlines():
-		word = word.rstrip()
-		# Focus on candidate words:
-		if len(word) != WORD_LENGTH:
+for word in dictionary():
+	if wrong_letters_re:
+		# Discard words that contain wrong letters:
+		if re.search(wrong_letters_re, word):
 			continue
-		# Ignore words with non alphabetic characters:
-		if not re.match(r'^[a-zA-Z]+$', word):
+
+	if correct_letters_re:
+		# Discard words that do not match correct letters in correct spots:
+		if not re.search(correct_letters_re, word):
 			continue
-		word = word.lower()
 
-		if wrong_letters_re:
-			# Discard words that contain wrong letters:
-			if re.search(wrong_letters_re, word):
-				continue
+	if all_misplaced_letters_re:
+		# Discard words that feature misplaced letters:
+		if re.match(all_misplaced_letters_re, word):
+			continue
+		# Discard words that do not contain the required letters:
+		if not has_required_letters(word, required_letters):
+			continue
 
-		if correct_letters_re:
-			# Discard words that do not match correct letters in correct spots:
-			if not re.search(correct_letters_re, word):
-				continue
-
-		if all_misplaced_letters_re:
-			# Discard words that feature misplaced letters:
-			if re.match(all_misplaced_letters_re, word):
-				continue
-			# Discard words that do not contain the required letters:
-			if not has_required_letters(word, required_letters):
-				continue
-
-		# Still here? Keep this word:
-		retained_words_set.add(word)
+	# Still here? Keep this word:
+	retained_words_set.add(word)
 
 # Display all retained words:
 retained_words = list(retained_words_set)
