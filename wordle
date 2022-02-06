@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""
+Python CLI assistant for Wordle players.
+"""
+import os, re, sys
+import requests
+import pathlib
+
+WORD_LENGTH = 5
+DICTIONARY_URL = 'https://raw.githubusercontent.com/DevangThakkar/wordle_archive/master/src/data/words.js'
+
+def download_dictionary():
+	response = requests.get(DICTIONARY_URL)
+	if response.status_code != 200:
+		raise Exception('Got HTTP status {response.status_code} when trying to download the dictionary')
+	all_words = ''
+	for line in response.text.split('\n'):
+		if ':' in line:
+			all_words += line.split(':')[0].strip() + '\n'
+	return all_words
+
+def cache_directory_path():
+	home_dir = os.environ.get('HOME', os.path.expanduser('~'))
+	cache_dir = os.path.join(home_dir, '.cache')
+	xdg_cache_dir = os.environ.get('XDG_CACHE_HOME', cache_dir)
+	our_name = os.path.basename(sys.argv[0])
+	our_cache_dir = os.path.join(xdg_cache_dir, our_name)
+	return our_cache_dir
+
+def cache_dictionary_path():
+	return os.path.join(cache_directory_path(), 'dictionary')
+
+def store_dictionary(data):
+	cache_path = pathlib.Path(cache_directory_path())
+	cache_path.mkdir(parents=True, exist_ok=True)
+	with open(cache_dictionary_path(), 'w') as dict_filedesc:
+		dict_filedesc.write(data)
+
+def open_cached_dictionary():
+	if not os.path.isfile(cache_dictionary_path()):
+		store_dictionary(download_dictionary())
+	return open(cache_dictionary_path())
+
+def set_string_char(string, index, char):
+	char_array = list(string)
+	char_array[index] = char
+	return ''.join(char_array)
+
+def dotted_pattern(position=None, letter=None, length=WORD_LENGTH):
+	pattern = '.' * WORD_LENGTH
+	if position is not None and letter is not None:
+		pattern = set_string_char(pattern, position - 1, letter)
+	return pattern
+
+def parse_misplaced_letter(misplaced_letter):
+	misplaced_letter = misplaced_letter.lower()
+	# Format #1: a1, 3b, 4d
+	parse_misplaced_letter_re1 = r'^(?P<letter>[a-z])(?P<position>[0-9])$'
+	parse_misplaced_letter_re2 = r'^(?P<position>[0-9])(?P<letter>[a-z])$'
+	if rem := re.match(parse_misplaced_letter_re1, misplaced_letter) or re.match(parse_misplaced_letter_re2, misplaced_letter):
+		position = int(rem.group('position'))
+		if 1 <= position <= WORD_LENGTH:
+			yield dotted_pattern(position, rem.group('letter'))
+		else:
+			raise Exception(f'Invalid position {position} in {misplaced_letter}')
+	# Format #2: ^u
+	elif rem := re.match('^\^(?P<letter>[a-z])$', misplaced_letter):
+		yield dotted_pattern(1, rem.group('letter'))
+	# Format #3: u$
+	elif rem := re.match('^(?P<letter>[a-z])\$$', misplaced_letter):
+		yield dotted_pattern(WORD_LENGTH, rem.group('letter'))
+	# Format #4: ..a.. .abc.
+	else:
+		if len(misplaced_letter) != WORD_LENGTH:
+			raise Exception(f'{misplaced_letter} is {len(misplaced_letter)}-char long instead of {WORD_LENGTH}')
+		for position, char in enumerate(misplaced_letter, 1):
+			if 'a' < char < 'z':
+				yield dotted_pattern(position, char)
+
+def has_required_letters(word, required_letter):
+	for required_letter in required_letters:
+		if required_letter not in word:
+			return False
+	return True
+
+# Real work starts here:
+if '-h' in sys.argv or '--help' in sys.argv:
+	our_name = os.path.basename(sys.argv[0])
+	help = f"""Wordle Assistant.
+
+Usage:
+  {our_name}: list all {WORD_LENGTH}-letter words
+
+  {our_name} wrongletters: same, but remove words that contain any of the wrong letters
+  Caution: this parameter cannot be empty.
+  Example: {our_name} tyrch
+
+  {our_name} wrongletters pattern: same, but keep only words that match the given (Python) regex pattern
+  Use a dash (-) character if you do not have a pattern yet
+  Examples:
+    {our_name} tyrch g.e.s
+    {our_name} tyrch ^g
+    {our_name} tyrch s$
+    {our_name} tyrch '^g[ue]'
+
+  {our_name} wrongletters pattern misplaced_letters ...: same but takes misplaced letters into account
+  There are multiple supported notations:
+  - positions range from 1 to {WORD_LENGTH}
+  - "3g" or "g3" means that a "g" at position 3 was considered misplaced
+  - "^u" means that a "u" at the start of the word was considered misplaced
+  - "e$" means that an "e" at the end of the word was considered misplaced
+  - ".s.u." means that an "s" at position 2 and a "u" at position 4 were considered misplaced
+  Examples:
+    {our_name} tyrch - 3g ^u e$ .s.u.
+    {our_name} tyrch '^g[ue]' 3g ^u e$ .s.u.
+"""
+	print(help)
+	sys.exit(0)
+wrong_letters_re = correct_letters_re = all_misplaced_letters_re = required_letters = None
+
+if len(sys.argv) >= 2:
+	wrong_letters = sys.argv[1].lower()
+	wrong_letters_re = f'[{wrong_letters}]'
+
+if len(sys.argv) >= 3:
+	if sys.argv[2] == '-':
+		correct_letters = dotted_pattern()
+	else:
+		correct_letters = sys.argv[2].lower()
+	correct_letters_re = f'{correct_letters}'
+
+if len(sys.argv) >= 4:
+	all_misplaced_letters_re = []
+	for misplaced_letter_arg in sys.argv[3:]:
+		all_misplaced_letters_re.extend(list(parse_misplaced_letter(misplaced_letter_arg)))
+	all_misplaced_letters_re = '|'.join(all_misplaced_letters_re)
+	all_misplaced_letters_re = f'^(?:{all_misplaced_letters_re})$'
+	required_letters = list(filter(lambda c: 'a' <= c <= 'z', all_misplaced_letters_re))
+
+retained_words_set = set()
+with open_cached_dictionary() as words_filedesc:
+	word_count = 0
+	for word in words_filedesc.readlines():
+		word = word.rstrip()
+		# Focus on candidate words:
+		if len(word) != WORD_LENGTH:
+			continue
+		# Ignore words with non alphabetic characters:
+		if not re.match(r'^[a-zA-Z]+$', word):
+			continue
+		word = word.lower()
+
+		if wrong_letters_re:
+			# Discard words that contain wrong letters:
+			if re.search(wrong_letters_re, word):
+				continue
+
+		if correct_letters_re:
+			# Discard words that do not match correct letters in correct spots:
+			if not re.search(correct_letters_re, word):
+				continue
+
+		if all_misplaced_letters_re:
+			# Discard words that feature misplaced letters:
+			if re.match(all_misplaced_letters_re, word):
+				continue
+			# Discard words that do not contain the required letters:
+			if not has_required_letters(word, required_letters):
+				continue
+
+		# Still here? Keep this word:
+		retained_words_set.add(word)
+
+# Display all retained words:
+retained_words = list(retained_words_set)
+retained_words.sort()
+for word in retained_words:
+	print(word)
+print(f'({len(retained_words)})')
+
+sys.exit(0)
