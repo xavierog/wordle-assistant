@@ -101,7 +101,7 @@ def parse_misplaced_letter(misplaced_letter):
 		if len(misplaced_letter) != WORD_LENGTH:
 			raise Exception(f'{misplaced_letter} is {len(misplaced_letter)}-char long instead of {WORD_LENGTH}')
 		for position, char in enumerate(misplaced_letter, 1):
-			if 'a' < char < 'z':
+			if 'a' <= char <= 'z':
 				yield dotted_pattern(position, char)
 
 def extract_letters(string):
