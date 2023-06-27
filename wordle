@@ -7,7 +7,7 @@ import requests
 import pathlib
 
 WORD_LENGTH = 5
-DICTIONARY_URL = 'https://raw.githubusercontent.com/DevangThakkar/wordle_archive/master/src/data/words.js'
+DICTIONARY_URL = 'https://raw.githubusercontent.com/DevangThakkar/wordle_archive/23cfba6a97cd61cc6b01ed8a399eb6df90dad88d/src/data/words.js'
 
 def download_dictionary():
 	response = requests.get(DICTIONARY_URL)
